@@ -15,7 +15,7 @@ async function main(){
         const website = await extractWebsiteFromQueue();
         if(website){
             console.log(`Checking ${website.url}`);
-            const isUp = await checkWebsiteWithRetry(website.url);
+            const isUp = await checkWebsiteUptime(website.url);
             if (isUp) {
                 console.log(`Website ${website.url} is up`);
                 await rescheduleWebsiteCheck(website.url);
