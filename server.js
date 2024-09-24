@@ -1,27 +1,37 @@
 const express = require("express");
 const client = require("./client");
-
+const sendNotificationEmail = require('./sendNotificationEmail')
 const app = express();
 app.use(express.json());
 const PORT = process.env.PORT || 3001;
 
 const QUEUE_NAME = "uptime-monitoring-queue";
-const CHECK_INTERVAL = 5*60*1000;
+const STATUS_CHANNEL = "website_status";
+const CHECK_INTERVAL = 10000;
 const RETRY_COUNT = 5;
-const RETRY_DELAY = 30 * 1000;
+const RETRY_DELAY = 10*1000; // 10 sec delay for retrying
+
+const dotenv = require('dotenv');
+dotenv.config();
 
 async function main(){
     while(true){
-        const website = await extractWebsiteFromQueue();
-        if(website){
-            console.log(`Checking ${website.url}`);
-            const isUp = await checkWebsiteUptime(website.url);
+        const websiteCheck = await extractWebsiteFromQueue();
+        console.log(websiteCheck);
+        if(websiteCheck){
+            const { url, userId, userEmail } = websiteCheck;
+            console.log(`Checking ${url} for user ${userId}`);
+            const isUp = await checkWebsiteUptime(url);
             if (isUp) {
-                console.log(`Website ${website.url} is up`);
-                await rescheduleWebsiteCheck(website.url);
+                console.log(`Website ${url} is up`);
+                await rescheduleWebsiteCheck(websiteCheck);
+                await publishStatusUpdate(url, "up", userId,userEmail);
             } else {
-                console.log(`Website ${website.url} is down`);
-                await sendNotificationEmail(website.url);
+                console.log(`Website ${url} is down`);
+                await rescheduleWebsiteCheck(websiteCheck);
+                await publishStatusUpdate(url, "down", userId,userEmail);
+                await sendNotificationEmail(url,userEmail);
+                
             }
         }else {
             console.log("Queue is empty");
@@ -29,6 +39,10 @@ async function main(){
         await new Promise((resolve) => setTimeout(resolve, 5000));
         
     }
+}
+
+async function publishStatusUpdate(url, status,userId,userEmail) {
+    await client.publish(STATUS_CHANNEL, JSON.stringify({ url, status, userId,userEmail }));
 }
 
 async function checkWebsiteUptime(url) {
@@ -54,16 +68,13 @@ async function checkWebsiteUptime(url) {
 }
 
 async function extractWebsiteFromQueue() {
-
     const now = Date.now();
     const result = await client.zrangebyscore(QUEUE_NAME, 0, now, "LIMIT", 0, 1);
-
     if (result.length === 0) {
         return null;
     }
     const check = JSON.parse(result[0]);
     await client.zrem(QUEUE_NAME, result[0]);
-
     return check;
 }
 
@@ -71,9 +82,9 @@ async function addWebsiteToQueue(check) {
     await client.zadd(QUEUE_NAME, check.nextCheckTime, JSON.stringify(check));
 }
 
-async function rescheduleWebsiteCheck(url) {
+async function rescheduleWebsiteCheck(check) {
     const nextCheckTime = Date.now() + CHECK_INTERVAL;
-    await addWebsiteToQueue({ url, nextCheckTime });
+  await addWebsiteToQueue({ ...check, nextCheckTime });
 }
 
 app.get("/health", (req, res) => {
