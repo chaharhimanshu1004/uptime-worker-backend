@@ -1,3 +1,5 @@
+const dotenv = require('dotenv');
+dotenv.config();
 const express = require("express");
 const client = require("./client");
 const sendNotificationEmail = require('./sendNotificationEmail')
@@ -11,8 +13,8 @@ const CHECK_INTERVAL = 10000;
 const RETRY_COUNT = 5;
 const RETRY_DELAY = 10*1000; // 10 sec delay for retrying
 
-const dotenv = require('dotenv');
-dotenv.config();
+
+
 
 async function main(){
     while(true){
