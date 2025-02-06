@@ -21,17 +21,17 @@ async function main(){
         const websiteCheck = await extractWebsiteFromQueue();
         console.log(websiteCheck);
         if(websiteCheck){
-            const { url, userId, userEmail } = websiteCheck;
-            console.log(`Checking ${url} for user ${userId}`);
+            const { url, userId, userEmail, id } = websiteCheck;
+            console.log(`Checking ${url} for user ${userId} and id is ${id}`);
             const isUp = await checkWebsiteUptime(url);
             if (isUp) {
                 console.log(`Website ${url} is up`);
                 await rescheduleWebsiteCheck(websiteCheck);
-                await publishStatusUpdate(url, "up", userId,userEmail);
+                await publishStatusUpdate(url, "up", userId,userEmail,id);
             } else {
                 console.log(`Website ${url} is down`);
                 await rescheduleWebsiteCheck(websiteCheck);
-                await publishStatusUpdate(url, "down", userId,userEmail);
+                await publishStatusUpdate(url, "down", userId,userEmail,id);
                 await sendNotificationEmail(url,userEmail);
                 
             }
@@ -43,8 +43,8 @@ async function main(){
     }
 }
 
-async function publishStatusUpdate(url, status,userId,userEmail) {
-    await client.publish(STATUS_CHANNEL, JSON.stringify({ url, status, userId,userEmail }));
+async function publishStatusUpdate(url, status,userId,userEmail,id) {
+    await client.publish(STATUS_CHANNEL, JSON.stringify({ url, status, userId, userEmail, id}));
 }
 
 async function checkWebsiteUptime(url) {
