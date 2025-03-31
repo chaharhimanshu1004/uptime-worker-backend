@@ -23,8 +23,13 @@ async function main(){
         const websiteCheck = await extractWebsiteFromQueue();
         if(websiteCheck){
             console.log(websiteCheck , typeof websiteCheck.id);
-            const { url, userId, userEmail, id } = websiteCheck;
+            const { url, userId, userEmail, id, isPaused } = websiteCheck;
             console.log(`Checking ${url} for user ${userId} for website id: ${id}`);
+            if (isPaused) {
+                console.log(`Website ${url} monitoring is paused, skipping check`);
+                await rescheduleWebsiteCheck(websiteCheck);
+                continue;
+            }
             const { isUp, responseTime} = await checkWebsiteUptime(url);
             if (isUp) {
                 console.log(`Website ${url} is up, response time: ${responseTime}ms`);
@@ -109,7 +114,7 @@ async function addWebsiteToQueue(check) {
 
 async function rescheduleWebsiteCheck(check) {
     const nextCheckTime = Date.now() + CHECK_INTERVAL;
-  await addWebsiteToQueue({ ...check, nextCheckTime });
+    await addWebsiteToQueue({ ...check, nextCheckTime });
 }
 
 app.get("/health", (req, res) => {
