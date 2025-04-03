@@ -14,27 +14,6 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-model WebsiteStatus {
-  id        String   @id @default(cuid())
-  websiteId Int      // Match the type from Website model
-  status    String   // "up" or "down"
-  responseTime Int    // in milliseconds
-  timestamp  DateTime @default(now())
-  website   Website  @relation(fields: [websiteId], references: [id])
-  @@index([websiteId, timestamp])
-}
-
-model Website {
-  id        Int      @id @default(autoincrement())
-  url       String   @unique
-  userId    Int
-  isPaused  Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  user      User     @relation(fields: [userId], references: [id])
-  statuses  WebsiteStatus[] 
-}
-
 model User {
   id        Int      @id @default(autoincrement())
   name       String
@@ -47,4 +26,43 @@ model User {
   updatedAt DateTime? @updatedAt
   websites  Website[]
 
+}
+
+model Website {
+  id              Int             @id @default(autoincrement())
+  url             String          @unique
+  userId          Int
+  isPaused        Boolean         @default(false)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  lastCheckedAt   DateTime?       
+  lastDownAt      DateTime?       
+  incidentCount   Int             @default(0) // Count of downtime incidents
+  user            User            @relation(fields: [userId], references: [id])
+  statuses        WebsiteStatus[]
+  incidents       Incident[]      
+}
+
+model WebsiteStatus {
+  id           String   @id @default(cuid())
+  websiteId    Int
+  status       String
+  responseTime Int
+  timestamp    DateTime @default(now())
+  website      Website  @relation(fields: [websiteId], references: [id])
+
+  @@index([websiteId, timestamp])
+}
+
+model Incident {
+  id             String    @id @default(cuid())
+  websiteId      Int
+  startTime      DateTime  @default(now())
+  endTime        DateTime?
+  isResolved     Boolean   @default(false)
+  responseTime   Int       @default(0)
+  duration       Int?     
+  website        Website   @relation(fields: [websiteId], references: [id])
+  
+  @@index([websiteId, startTime])
 }
