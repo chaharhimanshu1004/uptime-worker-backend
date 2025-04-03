@@ -30,13 +30,71 @@ async function main(){
                 await rescheduleWebsiteCheck(websiteCheck);
                 continue;
             }
+
+            await prisma.website.update({
+                where: { id },
+                data: { lastCheckedAt: new Date() },
+            })
+
             const { isUp, responseTime} = await checkWebsiteUptime(url);
             if (isUp) {
                 console.log(`Website ${url} is up, response time: ${responseTime}ms`);
+                const openIncident = await prisma.incident.findFirst({
+                    where: {
+                        websiteId: id,
+                        isResolved: false,
+                    },
+                })
+
+                if (openIncident) {
+                    const endTime = new Date()
+                    const duration = Math.floor((endTime.getTime() - openIncident.startTime.getTime()) / 1000)
+
+                    await prisma.incident.update({
+                        where: { id: openIncident.id },
+                        data: {
+                            endTime,
+                            isResolved: true,
+                            duration,
+                        },
+                    })
+
+                    console.log(`Resolved incident for ${url}, duration: ${duration} seconds`)
+                }
+
                 await rescheduleWebsiteCheck(websiteCheck);
                 await publishStatusUpdate(url, "up", userId,userEmail,id,responseTime);
             } else {
                 console.log(`Website ${url} is down`);
+                await prisma.website.update({
+                    where: { id },
+                    data: { lastDownAt: new Date() },
+                })
+
+                const openIncident = await prisma.incident.findFirst({
+                    where: {
+                        websiteId: id,
+                        isResolved: false,
+                    },
+                })
+          
+                if (!openIncident) {
+                    await prisma.website.update({
+                        where: { id },
+                        data: { incidentCount: { increment: 1 } },
+                    })
+
+                    await prisma.incident.create({
+                        data: {
+                            websiteId: id,
+                            responseTime: responseTime,
+                            isResolved: false,
+                        },
+                    })
+
+                    console.log(`Created new incident for ${url}`)
+                }
+          
                 await rescheduleWebsiteCheck(websiteCheck);
                 await publishStatusUpdate(url, "down", userId,userEmail,id,responseTime);
                 await sendNotificationEmail(url,userEmail);
