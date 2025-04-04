@@ -30,6 +30,10 @@ async function main(){
                 await rescheduleWebsiteCheck(websiteCheck);
                 continue;
             }
+            
+            const website = await prisma.website.findUnique({
+                where: { id }
+            });
 
             await prisma.website.update({
                 where: { id },
@@ -37,8 +41,22 @@ async function main(){
             })
 
             const { isUp, responseTime} = await checkWebsiteUptime(url);
+            const statusChanged = website.isUp !== isUp;
+
             if (isUp) {
                 console.log(`Website ${url} is up, response time: ${responseTime}ms`);
+
+                const updateData = { isUp: true };
+                if (statusChanged) {
+                    updateData.lastUpAt = new Date();
+                    console.log(`Website ${url} changed status from DOWN to UP`);
+                }
+
+                await prisma.website.update({
+                    where: { id },
+                    data: updateData
+                });
+
                 const openIncident = await prisma.incident.findFirst({
                     where: {
                         websiteId: id,
@@ -66,10 +84,17 @@ async function main(){
                 await publishStatusUpdate(url, "up", userId,userEmail,id,responseTime);
             } else {
                 console.log(`Website ${url} is down`);
+
+                const updateData = { isUp: false };
+                if (statusChanged) {
+                    updateData.lastDownAt = new Date();
+                    console.log(`Website ${url} changed status from UP to DOWN`);
+                }
+
                 await prisma.website.update({
                     where: { id },
-                    data: { lastDownAt: new Date() },
-                })
+                    data: updateData
+                });
 
                 const openIncident = await prisma.incident.findFirst({
                     where: {
@@ -116,7 +141,7 @@ async function publishStatusUpdate(url, status,userId,userEmail,id,responseTime)
                 responseTime: responseTime
             }
         })
-        await client.publish(STATUS_CHANNEL, JSON.stringify({ url, status, userId, userEmail, id,responseTime}));
+        await client.publish(STATUS_CHANNEL, JSON.stringify({ url, status, userId, userEmail, id,responseTime, isUp: status === "up" }));
     }catch(err){
         console.log('Error publishing status update:', err);
     }
