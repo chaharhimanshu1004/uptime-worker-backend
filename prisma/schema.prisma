@@ -33,10 +33,12 @@ model Website {
   url             String          @unique
   userId          Int
   isPaused        Boolean         @default(false)
+  isUp            Boolean         @default(true)
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
   lastCheckedAt   DateTime?       
-  lastDownAt      DateTime?       
+  lastDownAt      DateTime? 
+  lastUpAt        DateTime?       @default(now())
   incidentCount   Int             @default(0) // Count of downtime incidents
   user            User            @relation(fields: [userId], references: [id])
   statuses        WebsiteStatus[]
@@ -49,7 +51,7 @@ model WebsiteStatus {
   status       String
   responseTime Int
   timestamp    DateTime @default(now())
-  website      Website  @relation(fields: [websiteId], references: [id])
+  website      Website  @relation(fields: [websiteId], references: [id], onDelete: Cascade)
 
   @@index([websiteId, timestamp])
 }
@@ -62,7 +64,7 @@ model Incident {
   isResolved     Boolean   @default(false)
   responseTime   Int       @default(0)
   duration       Int?     
-  website        Website   @relation(fields: [websiteId], references: [id])
+  website        Website   @relation(fields: [websiteId], references: [id], onDelete: Cascade)
   
   @@index([websiteId, startTime])
 }

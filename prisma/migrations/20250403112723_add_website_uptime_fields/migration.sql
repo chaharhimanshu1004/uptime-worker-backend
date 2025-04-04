@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "Website" ADD COLUMN     "isUp" BOOLEAN NOT NULL DEFAULT true,
+ADD COLUMN     "lastUpAt" TIMESTAMP(3);
