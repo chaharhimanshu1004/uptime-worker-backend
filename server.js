@@ -11,11 +11,13 @@ const prisma = new PrismaClient();
 const PORT = process.env.PORT || 3001;
 
 const QUEUE_NAME = "uptime-monitoring-queue";
+const RECOVERY_SET = "uptime-processing-set";
 const STATUS_CHANNEL = "website_status";
 const CHECK_INTERVAL = 10000;
 const RETRY_COUNT = 5;
 const RETRY_DELAY = 10*1000; // 10 sec delay for retrying
 const QUEUE_FETCH_TIME = 5*1000
+const STALE_PROCESSING_TIMEOUT = 2 * 60 * 1000;
 
 
 async function main(){
@@ -186,8 +188,12 @@ async function extractWebsiteFromQueue() {
     if (result.length === 0) {
         return null;
     }
-    const check = JSON.parse(result[0]);
-    await client.zrem(QUEUE_NAME, result[0]);
+    const rawCheck = result[0];
+    const check = JSON.parse(rawCheck);
+    await client.multi()
+        .zrem(QUEUE_NAME, rawCheck)
+        .zadd(RECOVERY_SET, now, rawCheck)
+        .exec();
     return check;
 }
 
@@ -197,8 +203,27 @@ async function addWebsiteToQueue(check) {
 
 async function rescheduleWebsiteCheck(check) {
     const nextCheckTime = Date.now() + CHECK_INTERVAL;
-    await addWebsiteToQueue({ ...check, nextCheckTime });
+    const updatedCheck = { ...check, nextCheckTime };
+    const rawCheck = JSON.stringify(updatedCheck);
+    await client.multi()
+        .zrem(RECOVERY_SET, JSON.stringify(check))
+        .zadd(QUEUE_NAME, nextCheckTime, rawCheck)
+        .exec();
 }
+
+
+async function requeueStaleProcessingTasks() {
+    const now = Date.now();
+    const staleTasks = await client.zrangebyscore(RECOVERY_SET, 0, now - STALE_PROCESSING_TIMEOUT);
+    console.log('>>websites in recovery set are: ', staleTasks);
+    for (const task of staleTasks) {
+        console.log("Re-enqueuing the websites into the queue", task);
+        await client.zrem(RECOVERY_SET, task);
+        await client.zadd(QUEUE_NAME, now, task);
+    }
+}
+
+setInterval(requeueStaleProcessingTasks, STALE_PROCESSING_TIMEOUT);
 
 app.get("/health", (req, res) => {
     res.status(200).json({ message: "Hello from the Node.js backend!" });
@@ -207,4 +232,10 @@ app.get("/health", (req, res) => {
 app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
     main().catch(console.error);
+});
+
+process.on('SIGINT', async () => {
+    console.log('Shutting down...');
+    await prisma.$disconnect();
+    process.exit();
 });
