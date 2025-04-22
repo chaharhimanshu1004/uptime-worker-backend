@@ -50,6 +50,7 @@ model WebsiteStatus {
   websiteId    Int
   status       String
   responseTime Int
+  region       String       
   timestamp    DateTime @default(now())
   website      Website  @relation(fields: [websiteId], references: [id], onDelete: Cascade)
 
@@ -63,7 +64,7 @@ model Incident {
   endTime        DateTime?
   isResolved     Boolean   @default(false)
   responseTime   Int       @default(0)
-  duration       Int?     
+  duration       Int?    
   website        Website   @relation(fields: [websiteId], references: [id], onDelete: Cascade)
   
   @@index([websiteId, startTime])

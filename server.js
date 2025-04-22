@@ -20,6 +20,8 @@ const QUEUE_FETCH_TIME = 5*1000
 const STALE_PROCESSING_TIMEOUT = 2 * 60 * 1000;
 
 
+const REGION = process.env.REGION || "asia";
+
 async function main(){
     while(true){
         const websiteCheck = await extractWebsiteFromQueue();
@@ -116,6 +118,7 @@ async function main(){
                             websiteId: id,
                             responseTime: responseTime,
                             isResolved: false,
+                            region: REGION
                         },
                     })
 
@@ -140,7 +143,8 @@ async function publishStatusUpdate(url, status,userId,userEmail,id,responseTime)
             data: {
                 websiteId: id,
                 status: status,
-                responseTime: responseTime
+                responseTime: responseTime,
+                region: REGION
             }
         })
         await client.publish(STATUS_CHANNEL, JSON.stringify({ url, status, userId, userEmail, id,responseTime, isUp: status === "up" }));
