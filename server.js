@@ -10,8 +10,10 @@ app.use(express.json());
 const prisma = new PrismaClient();
 const PORT = process.env.PORT || 3001;
 
-const QUEUE_NAME = "uptime-monitoring-queue";
-const RECOVERY_SET = "uptime-processing-set";
+const REGION = process.env.REGION || "asia";
+
+const QUEUE_NAME = `uptime-monitoring-queue-${REGION}`;
+const RECOVERY_SET = `uptime-processing-set-${REGION}`;
 const STATUS_CHANNEL = "website_status";
 const CHECK_INTERVAL = 10000;
 const RETRY_COUNT = 5;
@@ -20,7 +22,6 @@ const QUEUE_FETCH_TIME = 5*1000
 const STALE_PROCESSING_TIMEOUT = 2 * 60 * 1000;
 
 
-const REGION = process.env.REGION || "asia";
 
 async function main(){
     while(true){
@@ -199,10 +200,6 @@ async function extractWebsiteFromQueue() {
         .zadd(RECOVERY_SET, now, rawCheck)
         .exec();
     return check;
-}
-
-async function addWebsiteToQueue(check) {
-    await client.zadd(QUEUE_NAME, check.nextCheckTime, JSON.stringify(check));
 }
 
 async function rescheduleWebsiteCheck(check) {
