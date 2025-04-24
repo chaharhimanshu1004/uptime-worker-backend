@@ -27,115 +27,119 @@ const API_TIMEOUT = 15000; // 15 seconds
 
 async function main(){
     while(true){
-        const websiteCheck = await extractWebsiteFromQueue();
-        if(websiteCheck){
-            console.log(websiteCheck , typeof websiteCheck.id);
-            const { url, userId, userEmail, id, isPaused, isFirstCheck } = websiteCheck;
-            console.log(`Checking ${url} for user ${userId} for website id: ${id}`);
-            if (isPaused) {
-                console.log(`Website ${url} monitoring is paused, skipping check`);
-                await rescheduleWebsiteCheck(websiteCheck);
-                continue;
-            }
-            
-            const website = await prisma.website.findUnique({
-                where: { id }
-            });
-
-            await prisma.website.update({
-                where: { id },
-                data: { lastCheckedAt: new Date() },
-            })
-
-            const { isUp, responseTime } = await checkWebsiteUptime(url, isFirstCheck);
-            const statusChanged = website.isUp !== isUp;
-
-            if (isUp) {
-                console.log(`Website ${url} is up, response time: ${responseTime}ms`);
-
-                const updateData = { isUp: true };
-                if (statusChanged) {
-                    updateData.lastUpAt = new Date();
-                    console.log(`Website ${url} changed status from DOWN to UP`);
+        try {
+            const websiteCheck = await extractWebsiteFromQueue();
+            if (websiteCheck) {
+                console.log(websiteCheck, typeof websiteCheck.id);
+                const { url, userId, userEmail, id, isPaused, isFirstCheck } = websiteCheck;
+                console.log(`Checking ${url} for user ${userId} for website id: ${id}`);
+                if (isPaused) {
+                    console.log(`Website ${url} monitoring is paused, skipping check`);
+                    await rescheduleWebsiteCheck(websiteCheck);
+                    continue;
                 }
+
+                const website = await prisma.website.findUnique({
+                    where: { id }
+                });
 
                 await prisma.website.update({
                     where: { id },
-                    data: updateData
-                });
-
-                const openIncident = await prisma.incident.findFirst({
-                    where: {
-                        websiteId: id,
-                        isResolved: false,
-                    },
+                    data: { lastCheckedAt: new Date() },
                 })
 
-                if (openIncident) {
-                    const endTime = new Date()
-                    const duration = Math.floor((endTime.getTime() - openIncident.startTime.getTime()) / 1000)
+                const { isUp, responseTime } = await checkWebsiteUptime(url, isFirstCheck);
+                const statusChanged = website.isUp !== isUp;
 
-                    await prisma.incident.update({
-                        where: { id: openIncident.id },
-                        data: {
-                            endTime,
-                            isResolved: true,
-                            duration,
-                        },
-                    })
+                if (isUp) {
+                    console.log(`Website ${url} is up, response time: ${responseTime}ms`);
 
-                    console.log(`Resolved incident for ${url}, duration: ${duration} seconds`)
-                }
+                    const updateData = { isUp: true };
+                    if (statusChanged) {
+                        updateData.lastUpAt = new Date();
+                        console.log(`Website ${url} changed status from DOWN to UP`);
+                    }
 
-                await rescheduleWebsiteCheck(websiteCheck);
-                await publishStatusUpdate(url, "up", userId,userEmail,id,responseTime);
-            } else {
-                console.log(`Website ${url} is down`);
-
-                const updateData = { isUp: false };
-                if (statusChanged) {
-                    updateData.lastDownAt = new Date();
-                    console.log(`Website ${url} changed status from UP to DOWN`);
-                }
-
-                await prisma.website.update({
-                    where: { id },
-                    data: updateData
-                });
-
-                const openIncident = await prisma.incident.findFirst({
-                    where: {
-                        websiteId: id,
-                        isResolved: false,
-                    },
-                })
-          
-                if (!openIncident) {
                     await prisma.website.update({
                         where: { id },
-                        data: { incidentCount: { increment: 1 } },
-                    })
+                        data: updateData
+                    });
 
-                    await prisma.incident.create({
-                        data: {
+                    const openIncident = await prisma.incident.findFirst({
+                        where: {
                             websiteId: id,
-                            responseTime: responseTime,
                             isResolved: false,
-                            region: REGION
                         },
                     })
 
-                    console.log(`Created new incident for ${url}`)
+                    if (openIncident) {
+                        const endTime = new Date()
+                        const duration = Math.floor((endTime.getTime() - openIncident.startTime.getTime()) / 1000)
+
+                        await prisma.incident.update({
+                            where: { id: openIncident.id },
+                            data: {
+                                endTime,
+                                isResolved: true,
+                                duration,
+                            },
+                        })
+
+                        console.log(`Resolved incident for ${url}, duration: ${duration} seconds`)
+                    }
+
+                    await rescheduleWebsiteCheck(websiteCheck);
+                    await publishStatusUpdate(url, "up", userId, userEmail, id, responseTime);
+                } else {
+                    console.log(`Website ${url} is down`);
+
+                    const updateData = { isUp: false };
+                    if (statusChanged) {
+                        updateData.lastDownAt = new Date();
+                        console.log(`Website ${url} changed status from UP to DOWN`);
+                    }
+
+                    await prisma.website.update({
+                        where: { id },
+                        data: updateData
+                    });
+
+                    const openIncident = await prisma.incident.findFirst({
+                        where: {
+                            websiteId: id,
+                            isResolved: false,
+                        },
+                    })
+
+                    if (!openIncident) {
+                        await prisma.website.update({
+                            where: { id },
+                            data: { incidentCount: { increment: 1 } },
+                        })
+
+                        await prisma.incident.create({
+                            data: {
+                                websiteId: id,
+                                responseTime: responseTime,
+                                isResolved: false,
+                                region: REGION
+                            },
+                        })
+
+                        console.log(`Created new incident for ${url}`)
+                    }
+
+                    await rescheduleWebsiteCheck(websiteCheck);
+                    await publishStatusUpdate(url, "down", userId, userEmail, id, responseTime);
+                    await sendNotificationEmail(url, userEmail);
                 }
-          
-                await rescheduleWebsiteCheck(websiteCheck);
-                await publishStatusUpdate(url, "down", userId,userEmail,id,responseTime);
-                await sendNotificationEmail(url,userEmail);
+            } else {
+                console.log("Queue is empty");
             }
-        }else {
-            console.log("Queue is empty");
+            await new Promise((resolve) => setTimeout(resolve, QUEUE_FETCH_TIME));
+        } catch (error) {
+            console.error("Error in main loop: ", error);
         }
-        await new Promise((resolve) => setTimeout(resolve, QUEUE_FETCH_TIME));
         
     }
 }
