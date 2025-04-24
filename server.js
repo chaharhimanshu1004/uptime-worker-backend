@@ -1,6 +1,7 @@
 const dotenv = require('dotenv');
 dotenv.config();
 const express = require("express");
+const axios = require("axios")
 const client = require("./client");
 const { PrismaClient } = require('@prisma/client');
 const sendNotificationEmail = require('./sendNotificationEmail')
@@ -16,10 +17,11 @@ const QUEUE_NAME = `uptime-monitoring-queue-${REGION}`;
 const RECOVERY_SET = `uptime-processing-set-${REGION}`;
 const STATUS_CHANNEL = "website_status";
 const CHECK_INTERVAL = 10000;
-const RETRY_COUNT = 5;
+const RETRY_COUNT = 3;
 const RETRY_DELAY = 10*1000; // 10 sec delay for retrying
-const QUEUE_FETCH_TIME = 5*1000
-const STALE_PROCESSING_TIMEOUT = 2 * 60 * 1000;
+const QUEUE_FETCH_TIME = 5 * 1000
+const STALE_PROCESSING_TIMEOUT = 2 * 60 * 1000; // 2 minutes
+const API_TIMEOUT = 15000; // 15 seconds
 
 
 
@@ -28,7 +30,7 @@ async function main(){
         const websiteCheck = await extractWebsiteFromQueue();
         if(websiteCheck){
             console.log(websiteCheck , typeof websiteCheck.id);
-            const { url, userId, userEmail, id, isPaused } = websiteCheck;
+            const { url, userId, userEmail, id, isPaused, isFirstCheck } = websiteCheck;
             console.log(`Checking ${url} for user ${userId} for website id: ${id}`);
             if (isPaused) {
                 console.log(`Website ${url} monitoring is paused, skipping check`);
@@ -45,7 +47,7 @@ async function main(){
                 data: { lastCheckedAt: new Date() },
             })
 
-            const { isUp, responseTime} = await checkWebsiteUptime(url);
+            const { isUp, responseTime } = await checkWebsiteUptime(url, isFirstCheck);
             const statusChanged = website.isUp !== isUp;
 
             if (isUp) {
@@ -154,11 +156,11 @@ async function publishStatusUpdate(url, status,userId,userEmail,id,responseTime)
     }
 }
 
-async function checkWebsiteUptime(url) {
+async function checkWebsiteUptime(url, isFirstCheck) {
     for (let i = 0; i < RETRY_COUNT; i++) {
         try {
             const startTime = Date.now();
-            const response = await fetch(url);
+            const response = await axios.get(url, {timeout: API_TIMEOUT});
             const responseTime = Date.now() - startTime
             if (response.status >= 200 && response.status < 300) {
                 return {
@@ -171,9 +173,32 @@ async function checkWebsiteUptime(url) {
                     isUp: true,
                     responseTime,
                 }
+            } else {
+                if (isFirstCheck) {
+                    console.log('First time check and the website is down:', url);
+                    return {
+                        isUp: false,
+                        responseTime,
+                    }
+                }
             }
         } catch (error) {
             console.error(`Error checking website ${url}: ${error.message}`);
+            if (error.code === "ENOTFOUND") {
+                console.error(`Website ${url} DNS not resolved`);
+                if (isFirstCheck || i == RETRY_COUNT - 1) {
+                    return {
+                        isUp: false,
+                        responseTime: 0,
+                    }
+                }
+            }else if(isFirstCheck && error.code === "ECONNABORTED"){
+                console.log('First time check and the website is down:', url);
+                return {
+                    isUp: false,
+                    responseTime: 0,
+                }
+            }
         }
 
         if (i < RETRY_COUNT - 1) {
@@ -204,7 +229,7 @@ async function extractWebsiteFromQueue() {
 
 async function rescheduleWebsiteCheck(check) {
     const nextCheckTime = Date.now() + CHECK_INTERVAL;
-    const updatedCheck = { ...check, nextCheckTime };
+    const updatedCheck = { ...check, isFirstCheck: false, nextCheckTime };
     const rawCheck = JSON.stringify(updatedCheck);
     await client.multi()
         .zrem(RECOVERY_SET, JSON.stringify(check))
