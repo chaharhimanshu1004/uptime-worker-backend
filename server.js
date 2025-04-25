@@ -5,6 +5,7 @@ const axios = require("axios")
 const client = require("./client");
 const { PrismaClient } = require('@prisma/client');
 const sendNotificationEmail = require('./sendNotificationEmail')
+const sendUptimeNotification = require('./sendUptimeNotification')
 const app = express();
 app.use(express.json());
 
@@ -22,7 +23,7 @@ const RETRY_DELAY = 10*1000; // 10 sec delay for retrying
 const QUEUE_FETCH_TIME = 5 * 1000
 const STALE_PROCESSING_TIMEOUT = 2 * 60 * 1000; // 2 minutes
 const API_TIMEOUT = 15000; // 15 seconds
-
+const EMAIL_SEND_FREQUENCY = 1000 * 60 * 60 ; // 1 hour
 
 
 async function main(){
@@ -31,7 +32,7 @@ async function main(){
             const websiteCheck = await extractWebsiteFromQueue();
             if (websiteCheck) {
                 console.log(websiteCheck, typeof websiteCheck.id);
-                const { url, userId, userEmail, id, isPaused, isFirstCheck } = websiteCheck;
+                const { url, userId, userEmail, id, isPaused, isFirstCheck, isEmailSent, lastEmailSentAt } = websiteCheck;
                 console.log(`Checking ${url} for user ${userId} for website id: ${id}`);
                 if (isPaused) {
                     console.log(`Website ${url} monitoring is paused, skipping check`);
@@ -49,7 +50,19 @@ async function main(){
                 })
 
                 const { isUp, responseTime } = await checkWebsiteUptime(url, isFirstCheck);
-                const statusChanged = website.isUp !== isUp;
+                let statusChanged = website.isUp !== isUp;
+
+                if (isFirstCheck) {
+                    statusChanged = false;
+                    await prisma.website.update({
+                        where: { id },
+                        data: { isUp, isChecking: false, lastCheckedAt: new Date() , 
+                            ...(isUp
+                            ? { lastUpAt: new Date() }      
+                            : { lastDownAt: new Date() }) 
+                        }
+                    });
+                }
 
                 if (isUp) {
                     console.log(`Website ${url} is up, response time: ${responseTime}ms`);
@@ -88,7 +101,12 @@ async function main(){
                         console.log(`Resolved incident for ${url}, duration: ${duration} seconds`)
                     }
 
-                    await rescheduleWebsiteCheck(websiteCheck);
+                    if (statusChanged) {
+                        websiteCheck.isEmailSent = false;
+                        websiteCheck.lastEmailSentAt = null;
+                        await sendUptimeNotification(userEmail, url, REGION);
+                        console.log(`Sent website up notification email to ${userEmail}`);
+                    }
                     await publishStatusUpdate(url, "up", userId, userEmail, id, responseTime);
                 } else {
                     console.log(`Website ${url} is down`);
@@ -129,13 +147,19 @@ async function main(){
                         console.log(`Created new incident for ${url}`)
                     }
 
-                    await rescheduleWebsiteCheck(websiteCheck);
                     await publishStatusUpdate(url, "down", userId, userEmail, id, responseTime);
-                    await sendNotificationEmail(url, userEmail);
+                    if ((isFirstCheck || statusChanged) && (!isEmailSent || lastEmailSentAt < new Date(Date.now() - EMAIL_SEND_FREQUENCY))) {
+                        await sendNotificationEmail(userEmail, url, id);
+                        websiteCheck.isEmailSent = true;
+                    }else{
+                        console.log('Already sent email notification, next email after 1 hour !')
+                    }
+                    
                 }
             } else {
                 console.log("Queue is empty");
             }
+            await rescheduleWebsiteCheck(websiteCheck);
             await new Promise((resolve) => setTimeout(resolve, QUEUE_FETCH_TIME));
         } catch (error) {
             console.error("Error in main loop: ", error);
