@@ -33,12 +33,15 @@ model Website {
   url             String          @unique
   userId          Int
   isPaused        Boolean         @default(false)
-  isUp            Boolean         @default(true)
+  isUp            Boolean         @default(false)
+  isChecking      Boolean         @default(true)
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
   lastCheckedAt   DateTime?       
   lastDownAt      DateTime? 
-  lastUpAt        DateTime?       @default(now())
+  lastUpAt        DateTime?  
+  isEmailSent     Boolean?         @default(false)
+  lastEmailSentAt DateTime?     
   incidentCount   Int             @default(0) // Count of downtime incidents
   user            User            @relation(fields: [userId], references: [id])
   statuses        WebsiteStatus[]

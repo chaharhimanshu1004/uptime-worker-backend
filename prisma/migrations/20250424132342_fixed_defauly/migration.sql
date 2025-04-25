@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "Website" ALTER COLUMN "isUp" SET DEFAULT false,
+ALTER COLUMN "lastUpAt" DROP DEFAULT;
