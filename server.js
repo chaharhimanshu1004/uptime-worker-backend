@@ -149,7 +149,7 @@ async function main(){
 
                     await publishStatusUpdate(url, "down", userId, userEmail, id, responseTime);
                     if ((isFirstCheck || statusChanged) && (!isEmailSent || lastEmailSentAt < new Date(Date.now() - EMAIL_SEND_FREQUENCY))) {
-                        await sendNotificationEmail(userEmail, url, id);
+                        await sendNotificationEmail(userEmail, url);
                         websiteCheck.isEmailSent = true;
                     }else{
                         console.log('Already sent email notification, next email after 1 hour !')
