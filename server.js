@@ -111,7 +111,7 @@ async function main(){
                     }
                     await publishStatusUpdate(url, "up", userId, userEmail, id, responseTime);
                 } else {
-                    console.log(`Website ${url} is down`);
+                    console.log(`Website ${url} is is down or DNS not resolved`);
 
                     const updateData = { isUp: false };
 
@@ -158,7 +158,7 @@ async function main(){
                     }
 
                     await publishStatusUpdate(url, "down", userId, userEmail, id, responseTime);
-                    if ((isFirstCheck || statusChanged) && (!isEmailSent || lastEmailSentAt < new Date(Date.now() - EMAIL_SEND_FREQUENCY))) {
+                    if (statusChanged || (!isEmailSent || lastEmailSentAt < new Date(Date.now() - EMAIL_SEND_FREQUENCY))) {
                         await sendNotificationEmail(userEmail, url);
                         websiteCheck.isEmailSent = true;
                     } else {
@@ -283,8 +283,10 @@ async function requeueStaleProcessingTasks() {
     console.log('>>websites in recovery set are: ', staleTasks);
     for (const task of staleTasks) {
         console.log("Re-enqueuing the websites into the queue", task);
-        await client.zrem(RECOVERY_SET, task);
-        await client.zadd(QUEUE_NAME, now, task);
+        await client.multi()
+                    .zrem(RECOVERY_SET, task)
+                    .zadd(QUEUE_NAME, now, task)
+                    .exec();
     }
 }
 
