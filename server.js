@@ -49,14 +49,14 @@ async function main(){
                     data: { lastCheckedAt: new Date() },
                 })
 
-                const { isUp, responseTime } = await checkWebsiteUptime(url, isFirstCheck);
+                const { isUp, responseTime, isDNSResolved = true } = await checkWebsiteUptime(url, isFirstCheck);
                 let statusChanged = website.isUp !== isUp;
 
                 if (isFirstCheck) {
                     statusChanged = false;
                     await prisma.website.update({
                         where: { id },
-                        data: { isUp, isChecking: false, lastCheckedAt: new Date() , 
+                        data: {isUp, isDNSResolved, isChecking: false, lastCheckedAt: new Date() , 
                             ...(isUp
                             ? { lastUpAt: new Date() }      
                             : { lastDownAt: new Date() }) 
@@ -73,10 +73,12 @@ async function main(){
                         console.log(`Website ${url} changed status from DOWN to UP`);
                     }
 
-                    await prisma.website.update({
-                        where: { id },
-                        data: updateData
-                    });
+                    if (!isFirstCheck) {
+                        await prisma.website.update({
+                            where: { id },
+                            data: updateData
+                        });
+                    }
 
                     const openIncident = await prisma.incident.findFirst({
                         where: {
@@ -112,15 +114,23 @@ async function main(){
                     console.log(`Website ${url} is down`);
 
                     const updateData = { isUp: false };
+
+                    if (!isDNSResolved) {
+                        console.log(`Website ${url} DNS not resolved`);
+                        updateData.isDNSResolved = false;
+                    }
+
                     if (statusChanged) {
                         updateData.lastDownAt = new Date();
                         console.log(`Website ${url} changed status from UP to DOWN`);
                     }
 
-                    await prisma.website.update({
-                        where: { id },
-                        data: updateData
-                    });
+                    if (!isFirstCheck) {
+                        await prisma.website.update({
+                            where: { id },
+                            data: updateData
+                        });
+                    }
 
                     const openIncident = await prisma.incident.findFirst({
                         where: {
@@ -151,10 +161,10 @@ async function main(){
                     if ((isFirstCheck || statusChanged) && (!isEmailSent || lastEmailSentAt < new Date(Date.now() - EMAIL_SEND_FREQUENCY))) {
                         await sendNotificationEmail(userEmail, url);
                         websiteCheck.isEmailSent = true;
-                    }else{
+                    } else {
                         console.log('Already sent email notification, next email after 1 hour !')
                     }
-                    
+
                 }
             } else {
                 console.log("Queue is empty");
@@ -217,6 +227,7 @@ async function checkWebsiteUptime(url, isFirstCheck) {
                 if (isFirstCheck || i == RETRY_COUNT - 1) {
                     return {
                         isUp: false,
+                        isDNSResolved: false,
                         responseTime: 0,
                     }
                 }
