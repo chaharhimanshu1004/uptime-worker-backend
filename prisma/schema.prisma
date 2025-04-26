@@ -34,6 +34,7 @@ model Website {
   userId          Int
   isPaused        Boolean         @default(false)
   isUp            Boolean         @default(false)
+  isDNSResolved   Boolean         @default(true)
   isChecking      Boolean         @default(true)
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
