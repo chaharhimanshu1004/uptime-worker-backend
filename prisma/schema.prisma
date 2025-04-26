@@ -40,8 +40,6 @@ model Website {
   lastCheckedAt   DateTime?       
   lastDownAt      DateTime? 
   lastUpAt        DateTime?  
-  isEmailSent     Boolean?         @default(false)
-  lastEmailSentAt DateTime?     
   incidentCount   Int             @default(0) // Count of downtime incidents
   user            User            @relation(fields: [userId], references: [id])
   statuses        WebsiteStatus[]
