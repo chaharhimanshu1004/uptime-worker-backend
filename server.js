@@ -159,7 +159,7 @@ async function main(){
             } else {
                 console.log("Queue is empty");
             }
-            await rescheduleWebsiteCheck(websiteCheck);
+            if (websiteCheck) await rescheduleWebsiteCheck(websiteCheck);
             await new Promise((resolve) => setTimeout(resolve, QUEUE_FETCH_TIME));
         } catch (error) {
             console.error("Error in main loop: ", error);
