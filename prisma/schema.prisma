@@ -69,6 +69,7 @@ model Incident {
   duration       Int?    
   region         String
   reason         String
+  isAcknowledged Boolean
   website        Website   @relation(fields: [websiteId], references: [id], onDelete: Cascade)
   
   @@index([websiteId, startTime])
