@@ -18,9 +18,9 @@ const QUEUE_NAME = `uptime-monitoring-queue-${REGION}`;
 const RECOVERY_SET = `uptime-processing-set-${REGION}`;
 const STATUS_CHANNEL = "website_status";
 const CHECK_INTERVAL = 10000;
-const RETRY_COUNT = 3;
-const RETRY_DELAY = 10*1000; // 10 sec delay for retrying
-const QUEUE_FETCH_TIME = 5 * 1000
+const RETRY_COUNT = 1;
+const RETRY_DELAY = 2 * 1000; // 2 sec delay for retrying
+const QUEUE_FETCH_TIME = 2 * 1000
 const STALE_PROCESSING_TIMEOUT = 2 * 60 * 1000; // 2 minutes
 const API_TIMEOUT = 15000; // 15 seconds
 const EMAIL_SEND_FREQUENCY = 1000 * 60 * 60 ; // 1 hour
@@ -83,6 +83,7 @@ async function main(){
                     const openIncident = await prisma.incident.findFirst({
                         where: {
                             websiteId: id,
+                            region: REGION,
                             isResolved: false,
                         },
                     })
@@ -135,11 +136,12 @@ async function main(){
                     const openIncident = await prisma.incident.findFirst({
                         where: {
                             websiteId: id,
+                            region: REGION,
                             isResolved: false,
                         },
                     })
 
-                    if (!openIncident) {
+                    if (!openIncident || openIncident.region !== REGION) {
                         await prisma.website.update({
                             where: { id },
                             data: { incidentCount: { increment: 1 } },
@@ -150,7 +152,9 @@ async function main(){
                                 websiteId: id,
                                 responseTime: responseTime,
                                 isResolved: false,
-                                region: REGION
+                                region: REGION,
+                                reason: isDNSResolved ? "DOWN" : "DNS NOT RESOLVED",
+                                isAcknowledged: false,
                             },
                         })
 
