@@ -32,7 +32,7 @@ async function main(){
             const websiteCheck = await extractWebsiteFromQueue();
             if (websiteCheck) {
                 console.log(websiteCheck, typeof websiteCheck.id);
-                const { url, userId, userEmail, id, isPaused, isFirstCheck, isEmailSent, lastEmailSentAt } = websiteCheck;
+                const { url, userId, userEmail, id, isPaused, isFirstCheck, isEmailSent, lastEmailSentAt, isAcknowledged } = websiteCheck;
                 console.log(`Checking ${url} for user ${userId} for website id: ${id}`);
                 if (isPaused) {
                     console.log(`Website ${url} monitoring is paused, skipping check`);
@@ -162,11 +162,13 @@ async function main(){
                     }
 
                     await publishStatusUpdate(url, "down", userId, userEmail, id, responseTime);
-                    if (statusChanged || (!isEmailSent || lastEmailSentAt < new Date(Date.now() - EMAIL_SEND_FREQUENCY))) {
+                    if (!isAcknowledged && (statusChanged || (!isEmailSent || lastEmailSentAt < new Date(Date.now() - EMAIL_SEND_FREQUENCY)))) {
                         await sendNotificationEmail(userEmail, url);
                         websiteCheck.isEmailSent = true;
                     } else {
-                        console.log('Already sent email notification, next email after 1 hour !')
+                        if (isAcknowledged) {
+                            console.log(`Incident is acknowledged, not sending email notification for ${url}`);
+                        } else console.log('Already sent email notification, next email after 1 hour !')
                     }
 
                 }
@@ -192,7 +194,7 @@ async function publishStatusUpdate(url, status,userId,userEmail,id,responseTime)
                 region: REGION
             }
         })
-        await client.publish(STATUS_CHANNEL, JSON.stringify({ url, status, userId, userEmail, id,responseTime, isUp: status === "up" }));
+        // await client.publish(STATUS_CHANNEL, JSON.stringify({ url, status, userId, userEmail, id,responseTime, isUp: status === "up" }));
     }catch(err){
         console.log('Error publishing status update:', err);
     }
