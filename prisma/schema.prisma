@@ -42,6 +42,7 @@ model Website {
   lastDownAt      DateTime? 
   lastUpAt        DateTime?  
   incidentCount   Int             @default(0) // Count of downtime incidents
+  isAcknowledged  Boolean         @default(false)
   user            User            @relation(fields: [userId], references: [id])
   statuses        WebsiteStatus[]
   incidents       Incident[]      
