@@ -265,6 +265,7 @@ async function extractWebsiteFromQueue() {
     }
     const rawCheck = result[0];
     const check = JSON.parse(rawCheck);
+    check._originalString = rawCheck
     await client.multi()
         .zrem(QUEUE_NAME, rawCheck)
         .zadd(RECOVERY_SET, now, rawCheck)
@@ -275,9 +276,10 @@ async function extractWebsiteFromQueue() {
 async function rescheduleWebsiteCheck(check) {
     const nextCheckTime = Date.now() + CHECK_INTERVAL;
     const updatedCheck = { ...check, isFirstCheck: false, nextCheckTime };
+    delete updatedCheck._originalString;
     const rawCheck = JSON.stringify(updatedCheck);
     await client.multi()
-        .zrem(RECOVERY_SET, JSON.stringify(check))
+        .zrem(RECOVERY_SET, check._originalString)
         .zadd(QUEUE_NAME, nextCheckTime, rawCheck)
         .exec();
 }
