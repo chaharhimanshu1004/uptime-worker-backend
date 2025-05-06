@@ -165,6 +165,7 @@ async function main(){
                     if (!isAcknowledged && (statusChanged || (!isEmailSent || lastEmailSentAt < new Date(Date.now() - EMAIL_SEND_FREQUENCY)))) {
                         await sendNotificationEmail(userEmail, url);
                         websiteCheck.isEmailSent = true;
+                        websiteCheck.lastEmailSentAt = new Date();
                     } else {
                         if (isAcknowledged) {
                             console.log(`Incident is acknowledged, not sending email notification for ${url}`);
