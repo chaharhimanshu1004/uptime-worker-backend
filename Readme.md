@@ -17,8 +17,7 @@ It performs the following tasks:
 
 This architecture ensures a **decoupled, scalable**, and **resilient** uptime monitoring system.
 
-You can find the Main uptime monitoring repo here:  
-[https://github.com/chaharhimanshu1004/uptime-monitoring](https://github.com/chaharhimanshu1004/uptime-monitoring)
+🔗 **[Main Uptime Monitoring Repo](https://github.com/chaharhimanshu1004/uptime-monitoring)**
 ---
 
 ## ⚙️ Tech Stack
